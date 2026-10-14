@@ -1,5 +1,5 @@
 // Offline support: keep the app shell cached, refresh it in the background.
-const CACHE = 'sub-clock-v3';
+const CACHE = 'sub-clock-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

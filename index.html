@@ -165,6 +165,28 @@ textarea{resize:vertical;min-height:7.5em;line-height:1.6}
 .toggle input:checked{background:var(--go)}
 .toggle input:checked::after{transform:translateX(20px)}
 input[type=range]{width:100%;accent-color:var(--go)}
+/* goalkeeper: wears a different kit, so the chip is the accent yellow ringed in the team colour */
+.chip.gk{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.chip.gk.t0{box-shadow:inset 0 0 0 3px var(--home),0 1px 3px rgba(0,0,0,.3)}
+.chip.gk.t1{box-shadow:inset 0 0 0 3px var(--away),0 1px 3px rgba(0,0,0,.3)}
+.pos-tag.gk{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn-sec{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px;font-weight:700;font-size:.95rem}
+.sheet-bg{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.sheet{background:var(--surface);color:var(--ink);border-radius:18px;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));width:100%;max-width:560px;max-height:88vh;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.sheet h3{margin:0;font-family:var(--display);font-weight:800;font-size:1.6rem}
+.gk-now{margin:0;font-size:.95rem;color:var(--muted)}
+.gk-now b{color:var(--ink)}
+.gk-block{display:flex;flex-direction:column;gap:8px}
+.gk-players{display:flex;flex-direction:column;gap:10px}
+.gk-sub{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.gk-list{display:flex;flex-wrap:wrap;gap:6px}
+.pchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:4px 12px 4px 4px;font-weight:600;font-size:.9rem;max-width:100%}
+.pchip .pos-tag{height:1.45em;min-width:2.4em;font-size:.75rem;border-radius:99px}
+.pchip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.gk-preview{margin:0;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);font-size:.92rem}
+.sheet-actions{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.sheet-actions .ghost-btn{align-self:stretch}
+.gk-card input{font-weight:600}
 .ghost-btn{align-self:flex-start;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 14px;font-weight:600}
 .is-native .web-only,.is-web .native-only{display:none!important}
 .test{background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem}
@@ -208,6 +230,7 @@ input[type=range]{width:100%;accent-color:var(--go)}
         <button id="undo">Undo</button>
         <button id="newMatch">New match</button>
       </div>
+      <button id="gkBtn" class="btn-sec">Change goalie</button>
     </div>
 
     <section class="card">
@@ -306,6 +329,26 @@ input[type=range]{width:100%;accent-color:var(--go)}
 </div>
 <div class="flash" id="flash"></div>
 <div class="toast" id="toast" hidden></div>
+<div class="sheet-bg" id="gkSheet" hidden>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="gkTitle">
+    <h3 id="gkTitle">Change goalie</h3>
+    <div class="team-pick" id="gkTeam"></div>
+    <p class="gk-now" id="gkNow"></p>
+    <div class="gk-block">
+      <span class="set-title">Who goes in goal?</span>
+      <div id="gkPlayers" class="gk-players"></div>
+    </div>
+    <div class="gk-block" id="gkGroupWrap">
+      <span class="set-title" id="gkGroupLabel"></span>
+      <div class="pills" id="gkGroup"></div>
+    </div>
+    <p class="gk-preview" id="gkPreview"></p>
+    <div class="sheet-actions">
+      <button id="gkCancel" class="ghost-btn">Cancel</button>
+      <button id="gkConfirm" class="apply">Put in goal</button>
+    </div>
+  </section>
+</div>
 
 <script>
 /* Inside the Android app, window.SubNative is the bridge to the native timer service, voice and music ducking */
@@ -320,12 +363,12 @@ const fmt=sec=>{sec=Math.max(0,Math.floor(sec));return Math.floor(sec/60)+':'+St
 const fmtDown=sec=>fmt(Math.ceil(Math.max(0,sec)-1e-6));
 const clone=o=>JSON.parse(JSON.stringify(o));
 
-function mkTeam(name,ex){return{name,roster:{DEF:{names:ex[0],onField:3},MID:{names:ex[1],onField:3},ATT:{names:ex[2],onField:2}},rot:null,posIdx:0}}
+function mkTeam(name,ex,gk){return{name,roster:{gk:gk||'',DEF:{names:ex[0],onField:3},MID:{names:ex[1],onField:3},ATT:{names:ex[2],onField:2}},rot:null,posIdx:0,gk:gk||''}}
 function defaults(){
   const s={
     teams:[
-      mkTeam('Home',[['Maya','Liam','Ava','Noah','Zoe'],['Ethan','Chloe','Owen','Priya'],['Lucas','Sofia','Kai','Amara']]),
-      mkTeam('Away',[['Leo','Mia','Jack','Ella','Ryan'],['Nora','Ben','Isla','Sam'],['Ivy','Max','Ruby','Theo']])
+      mkTeam('Home',[['Maya','Liam','Ava','Noah','Zoe'],['Ethan','Chloe','Owen','Priya'],['Lucas','Sofia','Kai','Amara']],'Jordan'),
+      mkTeam('Away',[['Leo','Mia','Jack','Ella','Ryan'],['Nora','Ben','Isla','Sam'],['Ivy','Max','Ruby','Theo']],'Riley')
     ],
     example:true,
     settings:{v3:true,interval:240,warn:30,confirm:true,voice:true,repeat:false,prefix:'Sub time',voiceURI:'',volume:0.9,include:{DEF:true,MID:true,ATT:true}},
@@ -338,7 +381,7 @@ function defaults(){
 function rosterSig(s){return JSON.stringify(s.teams.map(t=>t.roster))}
 function buildAll(s){
   for(const t of s.teams){
-    t.rot={};t.posIdx=0;
+    t.rot={};t.posIdx=0;t.gk=(t.roster.gk||'').trim();
     for(const p of POS){
       const names=t.roster[p.key].names.map(n=>n.trim()).filter(Boolean);
       const n=Math.min(t.roster[p.key].onField,names.length);
@@ -373,6 +416,10 @@ const S=()=>state.settings;
 if(!S().v3){S().v3=true;S().warn=30;S().voiceURI=''}
 if(!S().v4){S().v4=true;S().gender='male';S().voiceURI=''}
 if(!S().v5){S().v5=true;S().rate=0.95}
+/* lineups saved before goalkeepers existed: add an empty goalie without flagging the lineup as edited */
+{const was=state.applied===rosterSig(state);
+ for(const t of state.teams){if(typeof t.roster.gk!=='string')t.roster.gk='';if(typeof t.gk!=='string')t.gk=t.roster.gk.trim()}
+ if(was)state.applied=rosterSig(state)}
 
 function save(){
   try{
@@ -393,9 +440,29 @@ function pendingsOf(teams){
 }
 function pendings(){return pendingsOf(state.teams)}
 function mutate(rot,p){const r=rot[p.pos];r.field.shift();r.bench.shift();r.field.push(p.on);r.bench.push(p.off)}
+function snapshotUndo(){state.undo.push({teams:state.teams.map(t=>({rot:clone(t.rot),posIdx:t.posIdx,gk:t.gk||''})),log:clone(state.log)})}
+
+/* ---------- goalkeeper swap ----------
+   The goalie sits outside the DEF/MID/ATT rotation. Swapping puts a chosen player in goal
+   (removed from their group) and the old goalie into a chosen group, taking the new
+   goalie's place: on the field if the new goalie was on the field, otherwise at the back
+   of that group's line to come on. */
+function swapGoalie(teamIdx,pos,where,i,group){
+  const tm=state.teams[teamIdx],r=tm.rot[pos],list=where==='field'?r.field:r.bench;
+  const name=list[i];if(name==null)return null;
+  snapshotUndo();
+  list.splice(i,1);
+  const old=tm.gk||'';let filled='';
+  if(old){const g=tm.rot[group];(where==='field'?g.field:g.bench).push(old)}
+  else if(where==='field'&&r.bench.length){filled=r.bench.shift();r.field.push(filled)}
+  tm.gk=name;
+  const entry={team:teamIdx,in:name,out:old,group:old?group:'',where,filled};
+  state.log.unshift({t:matchElapsed(),gk:entry});
+  return entry;
+}
 function applySubs(at){
   const ps=pendings();if(!ps.length)return null;
-  state.undo.push({teams:state.teams.map(t=>({rot:clone(t.rot),posIdx:t.posIdx})),log:clone(state.log)});
+  snapshotUndo();
   for(const p of ps){const t=state.teams[p.team];mutate(t.rot,p);t.posIdx=(p.idx+1)%3}
   state.log.unshift({t:at==null?matchElapsed():Math.max(0,at),subs:ps.map(({team,pos,off,on})=>({team,pos,off,on}))});
   return ps;
@@ -451,8 +518,8 @@ function skipTurn(){
 }
 function undo(){
   const u=state.undo.pop();if(!u)return;
-  u.teams.forEach((x,i)=>{state.teams[i].rot=x.rot;state.teams[i].posIdx=x.posIdx});
-  state.log=u.log;toast('Last sub undone');render();save();
+  u.teams.forEach((x,i)=>{state.teams[i].rot=x.rot;state.teams[i].posIdx=x.posIdx;if('gk' in x)state.teams[i].gk=x.gk});
+  state.log=u.log;toast('Undone');render();save();
 }
 function newMatch(){
   releaseAwake();
@@ -677,13 +744,16 @@ function render(){
     const tm=state.teams[i],p=ps.find(x=>x.team===i);
     return order.map(k=>`<div class="line">${tm.rot[k].field.map((n,j)=>`<span class="chip t${i}${j===0&&p&&p.pos===k?' flag':''}">${esc(n)}</span>`).join('')}</div>`).join('');
   };
+  const gkRow=i=>{const g=state.teams[i].gk;return `<div class="line">${g?`<span class="chip gk t${i}">GK · ${esc(g)}</span>`:''}</div>`};
   $('#pitch').innerHTML=`<span class="side top">${esc(state.teams[1].name)}</span>
-    <div class="half">${rows(1,['DEF','MID','ATT'])}</div>
+    <div class="half">${gkRow(1)}${rows(1,['DEF','MID','ATT'])}</div>
     <div class="halfway"></div>
-    <div class="half">${rows(0,['ATT','MID','DEF'])}</div>
+    <div class="half">${rows(0,['ATT','MID','DEF'])}${gkRow(0)}</div>
     <span class="side bottom">${esc(state.teams[0].name)}</span>`;
 
-  $('#log').innerHTML=state.log.length?state.log.map(e=>`<li><time>${fmt(e.t)}</time><div class="txt">${e.subs.map(s=>`<div><i class="dot t${s.team}"></i><strong>${esc(s.off)}</strong>: Off</div>`).join('')}</div></li>`).join('')
+  const PL={DEF:'Defenders',MID:'Midfielders',ATT:'Attackers'};
+  const gkLine=g=>`<div><i class="dot t${g.team}"></i><strong>${esc(g.in)}</strong>: In goal${g.out?` <span class="in">· ${esc(g.out)} to ${PL[g.group]}</span>`:''}${g.filled?` <span class="in">· ${esc(g.filled)} on</span>`:''}</div>`;
+  $('#log').innerHTML=state.log.length?state.log.map(e=>`<li><time>${fmt(e.t)}</time><div class="txt">${e.gk?gkLine(e.gk):e.subs.map(s=>`<div><i class="dot t${s.team}"></i><strong>${esc(s.off)}</strong>: Off</div>`).join('')}</div></li>`).join('')
     :'<li style="display:block"><p class="empty">Subs appear here with the match time.</p></li>';
 
   updateClock();
@@ -696,7 +766,10 @@ function renderLineup(){
   $('#teamPick').innerHTML=state.teams.map((tm,i)=>`<button data-i="${i}" aria-pressed="${i===lt}"><i class="dot t${i}"></i><span>${esc(tm.name)}</span></button>`).join('');
   $('#teamName').value=state.teams[lt].name;
   const R=state.teams[lt].roster;
-  $('#posCards').innerHTML=POS.map(({key,plural})=>`<section class="card pos-card" data-pos="${key}">
+  $('#posCards').innerHTML=`<section class="card pos-card gk-card">
+      <header><span class="pos-tag gk">GK</span><h3>Goalkeeper</h3></header>
+      <input type="text" id="gk-input" maxlength="24" placeholder="Goalie's name (optional)" aria-label="Goalkeeper" value="${esc(R.gk||'')}">
+      <div class="count">Stays in goal and is skipped by the sub timer. To swap goalies during a match, use Change goalie on the Match tab.</div></section>`+POS.map(({key,plural})=>`<section class="card pos-card" data-pos="${key}">
       <header><span class="pos-tag">${key}</span><h3>${plural}</h3><span class="step-label">On field</span>
         <span class="stepper"><button data-act="dn" aria-label="Fewer ${plural} on field">−</button><output>${R[key].onField}</output><button data-act="up" aria-label="More ${plural} on field">+</button></span></header>
       <textarea id="names-${key}" aria-label="${plural}, one per line" placeholder="One name per line">${esc(R[key].names.join('\n'))}</textarea>
@@ -715,7 +788,8 @@ $('#teamName').addEventListener('input',e=>{
   render();save();
 });
 $('#posCards').addEventListener('input',e=>{
-  const card=e.target.closest('.pos-card');if(!card)return;const key=card.dataset.pos;
+  if(e.target.id==='gk-input'){state.teams[lt].roster.gk=e.target.value;state.example=false;syncApply();render();save();return}
+  const card=e.target.closest('.pos-card');if(!card||!card.dataset.pos)return;const key=card.dataset.pos;
   state.teams[lt].roster[key].names=e.target.value.split('\n');state.example=false;updateCount(key);syncApply();render();save();
 });
 $('#posCards').addEventListener('click',e=>{
@@ -732,7 +806,7 @@ function syncApply(){
 }
 $('#apply').addEventListener('click',()=>{
   if(started()&&!applyArm){applyArm=1;const b=$('#apply');b.classList.add('arm');b.textContent='Tap again: this resets the match clock and log';setTimeout(()=>{if(applyArm)syncApply()},4000);return}
-  for(const t of state.teams)for(const{key}of POS)t.roster[key].names=t.roster[key].names.map(s=>s.trim()).filter(Boolean);
+  for(const t of state.teams){for(const{key}of POS)t.roster[key].names=t.roster[key].names.map(s=>s.trim()).filter(Boolean);t.roster.gk=(t.roster.gk||'').trim()}
   newMatch();syncApply();showTab('match');toast('Lineup applied');
 });
 
@@ -805,6 +879,64 @@ $('#newMatch').onclick=e=>{
   if(!nmArm){nmArm=1;b.classList.add('arm');b.textContent='Tap again';setTimeout(()=>{nmArm=0;b.classList.remove('arm');b.textContent='New match'},3000);return}
   nmArm=0;b.classList.remove('arm');b.textContent='New match';newMatch();
 };
+/* ---------- Change goalie sheet ---------- */
+const PLURAL={DEF:'Defenders',MID:'Midfielders',ATT:'Attackers'};
+let gk={team:0,pick:null,group:null,groupTouched:false,lastFocus:null};
+function openGoalie(){
+  gk={team:gk.team||0,pick:null,group:null,groupTouched:false,lastFocus:document.activeElement};
+  $('#gkSheet').hidden=false;renderGoalie();
+  setTimeout(()=>{const b=$('#gkTeam button[aria-pressed="true"]');b&&b.focus()},0);
+}
+function closeGoalie(){$('#gkSheet').hidden=true;try{gk.lastFocus&&gk.lastFocus.focus()}catch(e){}}
+function renderGoalie(){
+  const tm=state.teams[gk.team],cur=tm.gk||'';
+  $('#gkTeam').innerHTML=state.teams.map((t,i)=>`<button data-i="${i}" aria-pressed="${i===gk.team}"><i class="dot t${i}"></i><span>${esc(t.name)}</span></button>`).join('');
+  $('#gkNow').innerHTML=cur?`In goal now: <b>${esc(cur)}</b>`:'No goalie set for this team yet.';
+
+  const chips=where=>POS.map(({key})=>tm.rot[key][where].map((n,i)=>{
+    const sel=gk.pick&&gk.pick.pos===key&&gk.pick.where===where&&gk.pick.i===i;
+    return `<button class="pchip" data-pos="${key}" data-where="${where}" data-i="${i}" aria-pressed="${!!sel}"><span class="pos-tag">${key}</span>${esc(n)}</button>`;
+  }).join('')).join('');
+  const onF=chips('field'),offF=chips('bench');
+  $('#gkPlayers').innerHTML=(onF?`<span class="gk-sub">On the field</span><div class="gk-list">${onF}</div>`:'')
+    +(offF?`<span class="gk-sub">Waiting to come on</span><div class="gk-list">${offF}</div>`:'')
+    +(!onF&&!offF?'<p class="empty">No players in this team’s lineup.</p>':'');
+
+  /* where the old goalie goes; defaults to the new goalie's group so the team shape stays the same */
+  const wrap=$('#gkGroupWrap');wrap.hidden=!cur;
+  if(cur){
+    if(!gk.groupTouched)gk.group=gk.pick?gk.pick.pos:(gk.group||'DEF');
+    $('#gkGroupLabel').textContent=`${cur} moves to`;
+    $('#gkGroup').innerHTML=POS.map(({key,plural})=>`<button data-k="${key}" aria-pressed="${gk.group===key}">${plural}</button>`).join('');
+  }
+
+  let msg='Pick who goes in goal.',ok=false;
+  if(gk.pick){
+    const r=tm.rot[gk.pick.pos],name=(gk.pick.where==='field'?r.field:r.bench)[gk.pick.i];ok=name!=null;
+    if(cur){
+      msg=`${name} goes in goal. ${cur} joins the ${PLURAL[gk.group]} `+(gk.pick.where==='field'?'on the field right away.':'and waits to come on.');
+    }else if(gk.pick.where==='field'){
+      msg=`${name} goes in goal.`+(r.bench.length?` ${r.bench[0]} comes on in their place.`:` The ${PLURAL[gk.pick.pos]} play one short.`);
+    }else msg=`${name} goes in goal.`;
+  }
+  $('#gkPreview').textContent=msg;
+  $('#gkConfirm').disabled=!ok;
+}
+$('#gkBtn').onclick=openGoalie;
+$('#gkCancel').onclick=closeGoalie;
+$('#gkSheet').addEventListener('click',e=>{if(e.target.id==='gkSheet')closeGoalie()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#gkSheet').hidden)closeGoalie()});
+$('#gkTeam').onclick=e=>{const b=e.target.closest('button');if(!b)return;gk.team=+b.dataset.i;gk.pick=null;gk.groupTouched=false;gk.group=null;renderGoalie()};
+$('#gkPlayers').onclick=e=>{const b=e.target.closest('.pchip');if(!b)return;gk.pick={pos:b.dataset.pos,where:b.dataset.where,i:+b.dataset.i};renderGoalie()};
+$('#gkGroup').onclick=e=>{const b=e.target.closest('button');if(!b)return;gk.group=b.dataset.k;gk.groupTouched=true;renderGoalie()};
+$('#gkConfirm').onclick=()=>{
+  if(!gk.pick)return;
+  const r=swapGoalie(gk.team,gk.pick.pos,gk.pick.where,gk.pick.i,gk.group||gk.pick.pos);
+  closeGoalie();
+  if(r)toast(`${r.in} in goal`+(r.out?` · ${r.out} to ${PLURAL[r.group]}`:''));
+  render();save();
+};
+
 let toastT;
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2400)}
 
