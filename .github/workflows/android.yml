@@ -1,0 +1,61 @@
+# Builds the Sub Clock Android app on GitHub's servers every time the app or the
+# website's index.html changes, then publishes it as a release so there is always
+# one download link for the newest APK:
+#   https://github.com/<you>/<repo>/releases/latest/download/SubClock.apk
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'android.zip'
+      - 'index.html'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app can also be uploaded as a single android.zip (the browser upload can't take folders)
+      - name: Unpack android.zip if present
+        run: |
+          if [ -f android.zip ]; then rm -rf android && unzip -q android.zip; fi
+          ls android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          # the app shows the same screens as the website: use the repo's index.html
+          if [ -f ../index.html ]; then cp ../index.html app/src/main/assets/www/index.html; fi
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../SubClock.apk
+
+      - name: Keep a copy with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubClock-apk
+          path: SubClock.apk
+
+      - name: Publish the download link
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Sub Clock for Android (build ${{ github.run_number }})
+          body: Install SubClock.apk on an Android phone. It installs over any earlier build.
+          files: SubClock.apk
+          make_latest: true

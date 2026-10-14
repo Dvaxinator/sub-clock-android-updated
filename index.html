@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f7a45">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sub Clock">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>Soccer Sub Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one-column sideline console — giant countdown, who comes off for each team, a full pitch of who is on, the sub log; Lineup and Settings live in tabs */
+:root{
+  --bg:#edf1ec; --surface:#ffffff; --surface-2:#f4f7f3; --ink:#13201a; --muted:#56665c; --line:#d2dbd3;
+  --pitch:#2f7a45; --pitch-2:#2a7040; --chalk:rgba(255,255,255,.72);
+  --accent:#f4c531; --accent-ink:#1d1a08; --go:#2f7a45; --stop:#b23a32;
+  --home:#2c66c9; --away:#c63d35; --on-team:#ffffff;
+  --display:"Barlow Condensed","Arial Narrow","sans-serif-condensed",system-ui,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1411; --surface:#161e1a; --surface-2:#1c2620; --ink:#e6eee8; --muted:#93a399; --line:#2a352f;
+  --pitch:#1f5733; --pitch-2:#1c4f2e; --chalk:rgba(255,255,255,.55);
+  --go:#5cc07c; --stop:#f07a70;
+  --home:#79a6f3; --away:#f2817a; --on-team:#0e1411; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1411; --surface:#161e1a; --surface-2:#1c2620; --ink:#e6eee8; --muted:#93a399; --line:#2a352f;
+  --pitch:#1f5733; --pitch-2:#1c4f2e; --chalk:rgba(255,255,255,.55);
+  --go:#5cc07c; --stop:#f07a70;
+  --home:#79a6f3; --away:#f2817a; --on-team:#0e1411; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:0 40px;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h2{font-family:var(--display);font-weight:700;font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;margin:0;color:var(--muted)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* tabs */
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px 6px;display:flex;align-items:center;gap:10px}
+.brand{font-family:var(--display);font-weight:800;font-size:1.35rem;letter-spacing:.02em;margin-right:auto;white-space:nowrap}
+.brand span{color:var(--go)}
+.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:7px 12px;border-radius:999px;font-weight:600;font-size:.88rem;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* clock */
+.clock{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px 16px;transition:background .2s}
+.clock-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.clock-top b{font-family:var(--display);font-size:1.15rem;letter-spacing:.03em;color:var(--ink);font-variant-numeric:tabular-nums}
+.digits{font-family:var(--display);font-weight:800;font-size:clamp(5.2rem,30vw,9.5rem);line-height:.9;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:-.01em;padding-block:10px 12px}
+.bar{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--go);border-radius:99px;transition:width .25s linear}
+.clock.due{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.clock.due .clock-top,.clock.due .clock-top b{color:var(--accent-ink)}
+.clock.due .bar{background:rgba(0,0,0,.12);border-color:transparent}
+.clock.due .bar i{background:var(--accent-ink)}
+.clock.due .digits{font-size:clamp(4.2rem,22vw,7rem);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.55}}
+.clock.idle .digits{color:var(--muted)}
+
+/* next subs */
+.next{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.next-head{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--muted);font-size:.88rem}
+.offlist{display:flex;flex-direction:column}
+.offrow{display:flex;flex-direction:column;gap:2px;padding-block:8px;border-top:1px solid var(--line);min-width:0}
+.offrow:first-child{border-top:0;padding-top:0}
+.offrow:last-child{padding-bottom:0}
+.tlabel{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;min-width:0}
+.offline{font-family:var(--display);font-weight:700;font-size:2.4rem;line-height:1.05;overflow-wrap:anywhere}
+.offline{display:flex;align-items:center;gap:12px;min-width:0}
+.offline .dot{width:14px;height:14px}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.t0.dot{background:var(--home)} .t1.dot{background:var(--away)}
+.voice-row{display:flex;gap:8px}
+.voice-row select{flex:1;min-width:0}
+.voice-row button{flex:none;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:0 14px;font-weight:600}
+.empty{color:var(--muted);font-size:.92rem;margin:0}
+.pos-tag{display:inline-grid;place-items:center;width:max-content;min-width:2.6em;height:1.5em;padding:0 .4em;border-radius:6px;font-family:var(--display);font-weight:700;font-size:.85rem;letter-spacing:.05em;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+
+/* controls */
+.controls{display:flex;flex-direction:column;gap:8px}
+.btn{border:0;border-radius:14px;padding:16px;font-family:var(--display);font-weight:700;font-size:1.5rem;letter-spacing:.04em;text-transform:uppercase}
+.btn.primary{background:var(--ink);color:var(--bg)}
+.btn.primary.running{background:var(--surface);color:var(--ink);border:2px solid var(--ink)}
+.btn.confirm{background:var(--go);color:#fff;font-size:1.8rem;padding:20px}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.row4 button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 4px;font-weight:600;font-size:.85rem}
+.row4 button:disabled{opacity:.4;cursor:default}
+.row4 button.arm{background:var(--stop);color:#fff;border-color:var(--stop)}
+
+/* pitch: away attacks down, home attacks up */
+.pitch{position:relative;border-radius:var(--r);padding:52px 10px;background:repeating-linear-gradient(180deg,var(--pitch) 0 46px,var(--pitch-2) 46px 92px);box-shadow:inset 0 0 0 3px var(--pitch),inset 0 0 0 5px var(--chalk);overflow:hidden;display:flex;flex-direction:column}
+.pitch::before,.pitch::after{content:"";position:absolute;left:50%;width:56%;height:44px;transform:translateX(-50%);border:2px solid var(--chalk)}
+.pitch::before{top:5px;border-top:0}
+.pitch::after{bottom:5px;border-bottom:0}
+.half{display:flex;flex-direction:column;gap:16px;position:relative;z-index:1}
+.halfway{position:relative;height:2px;background:var(--chalk);margin-block:26px}
+.halfway::after{content:"";position:absolute;left:50%;top:50%;width:84px;height:84px;transform:translate(-50%,-50%);border:2px solid var(--chalk);border-radius:50%}
+.side{position:absolute;left:12px;z-index:1;font-family:var(--display);font-weight:700;font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:#fff;opacity:.9;max-width:28%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side.top{top:12px} .side.bottom{bottom:12px}
+.line{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+.line:empty{display:none}
+.chip{display:inline-flex;align-items:center;border-radius:999px;padding:5px 12px;font-weight:600;font-size:.9rem;box-shadow:0 1px 3px rgba(0,0,0,.3);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--on-team)}
+.chip.t0{background:var(--home)} .chip.t1{background:var(--away)}
+.chip.flag{outline:3px dashed var(--accent);outline-offset:2px}
+.legend{font-size:.82rem;color:var(--muted);margin:0}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.log li{display:grid;grid-template-columns:3.4em 1fr;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line);font-size:.9rem}
+.log li:last-child{border-bottom:0}
+.log time{font-family:var(--display);font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums;color:var(--muted)}
+.log .txt{min-width:0;display:flex;flex-direction:column;gap:3px}
+.log .txt div{display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
+.log .txt span.in{color:var(--muted)}
+
+.banner{background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:10px 12px;font-weight:600;font-size:.9rem;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.banner button{border:0;background:var(--accent-ink);color:var(--accent);border-radius:8px;padding:6px 10px;font-weight:700}
+.tag-ex{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--surface-2);border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:2px 6px;margin-left:auto}
+
+/* lineup */
+.team-pick{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.team-pick button{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:10px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
+.team-pick button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-pick button[aria-pressed="true"]{border-color:var(--ink)}
+.pos-card{gap:8px}
+.pos-card header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pos-card header h3{margin:0;font-family:var(--display);font-size:1.4rem;font-weight:700;margin-right:auto}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2)}
+.stepper button{border:0;background:transparent;width:36px;height:34px;font-size:1.2rem;font-weight:600}
+.stepper output{min-width:2.2em;text-align:center;font-family:var(--display);font-weight:700;font-size:1.2rem;font-variant-numeric:tabular-nums}
+.step-label{font-size:.8rem;color:var(--muted);font-weight:600}
+textarea,input[type=text],select{width:100%;font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{resize:vertical;min-height:7.5em;line-height:1.6}
+.count{font-size:.82rem;color:var(--muted)}
+.hint{font-size:.88rem;color:var(--muted);margin:0}
+.apply{background:var(--ink);color:var(--bg);border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem}
+.apply:disabled{opacity:.5;cursor:default}
+.apply.arm{background:var(--stop);color:#fff}
+
+/* settings */
+.set{display:flex;flex-direction:column;gap:8px;padding-block:4px}
+.set + .set{border-top:1px solid var(--line);padding-top:14px}
+.set > label,.set-title{font-weight:600}
+.interval{display:flex;align-items:center;gap:12px}
+.interval output{font-family:var(--display);font-weight:800;font-size:2.6rem;font-variant-numeric:tabular-nums;min-width:3.2em;text-align:center}
+.interval button{width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-size:1.5rem;font-weight:600}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:7px 12px;font-weight:600;font-size:.88rem;font-variant-numeric:tabular-nums}
+.pills button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:600}
+.toggle input{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:99px;background:var(--line);position:relative;flex:none;transition:background .15s;cursor:pointer}
+.toggle input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.toggle input:checked{background:var(--go)}
+.toggle input:checked::after{transform:translateX(20px)}
+input[type=range]{width:100%;accent-color:var(--go)}
+.ghost-btn{align-self:flex-start;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 14px;font-weight:600}
+.is-native .web-only,.is-web .native-only{display:none!important}
+.test{background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;font-size:.9rem;z-index:20;max-width:calc(100% - 32px)}
+.flash{position:fixed;inset:0;background:var(--accent);pointer-events:none;opacity:0;z-index:15}
+.flash.go{animation:fl 1.2s ease-out}
+@keyframes fl{0%,25%{opacity:.75}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.clock.due .digits{animation:none}.flash.go{animation:none}.bar i{transition:none}}
+@media (max-width:380px){.seg button{padding:7px 9px}.brand{font-size:1.15rem}.offline{font-size:2rem}}
+</style>
+
+<div class="wrap">
+  <nav class="tabs" aria-label="Sections">
+    <div class="brand">Sub<span>Clock</span></div>
+    <div class="seg" role="group">
+      <button id="tab-match" aria-pressed="true" data-tab="match">Match</button>
+      <button id="tab-lineup" aria-pressed="false" data-tab="lineup">Lineup</button>
+      <button id="tab-settings" aria-pressed="false" data-tab="settings">Settings</button>
+    </div>
+  </nav>
+
+  <!-- MATCH -->
+  <main id="view-match" class="wrap">
+    <div id="staleBanner" class="banner" hidden><span>Lineup edited but not applied yet.</span><button id="goLineup">Review</button></div>
+
+    <section id="clock" class="clock idle" aria-live="polite">
+      <div class="clock-top"><span id="clockLabel">Next sub in</span><span>Match <b id="matchClock">0:00</b></span></div>
+      <div class="digits" id="digits">4:00</div>
+      <div class="bar"><i id="barFill"></i></div>
+    </section>
+
+    <section class="next" id="next"></section>
+
+    <div class="controls">
+      <button id="confirm" class="btn confirm" hidden>Sub done</button>
+      <button id="primary" class="btn primary">Start match</button>
+      <div class="row4">
+        <button id="subNow">Sub now</button>
+        <button id="skip">Skip turn</button>
+        <button id="undo">Undo</button>
+        <button id="newMatch">New match</button>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>On the field</h2>
+      <div class="pitch" id="pitch"></div>
+      <p class="legend">Dashed outline = coming off at the next sub.</p>
+    </section>
+
+    <section class="card">
+      <h2>Sub log</h2>
+      <ol class="log" id="log"></ol>
+    </section>
+  </main>
+
+  <!-- LINEUP -->
+  <main id="view-lineup" class="wrap" hidden>
+    <div class="team-pick" id="teamPick"></div>
+    <section class="card">
+      <label for="teamName" class="set-title" style="font-weight:600">Team name</label>
+      <input type="text" id="teamName" maxlength="24">
+    </section>
+    <p class="hint">One name per line. List order is the rotation order: the first names start on the field and the rest come on in turn. A player who comes off goes back to the end of the line for that position.</p>
+    <div id="posCards" class="wrap"></div>
+    <button id="apply" class="apply">Apply lineup</button>
+  </main>
+
+  <!-- SETTINGS -->
+  <main id="view-settings" class="wrap" hidden>
+    <section class="card">
+      <div class="set">
+        <span class="set-title">Time between subs</span>
+        <div class="interval">
+          <button id="intDown" aria-label="15 seconds less">−</button>
+          <output id="intVal">4:00</output>
+          <button id="intUp" aria-label="15 seconds more">+</button>
+        </div>
+        <div class="pills" id="intPresets"></div>
+      </div>
+      <div class="set">
+        <span class="set-title">Heads-up before each sub</span>
+        <div class="pills" id="warnPills"></div>
+        <p class="hint">A quieter beep and "Last play before sub."</p>
+      </div>
+      <div class="set">
+        <span class="set-title">When the timer hits zero</span>
+        <div class="pills" id="modePills"></div>
+        <p class="hint">"Wait" holds the clock until you tap Sub done, so subs can happen at the next stoppage. "Rotate automatically" logs the sub and restarts right away.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="set">
+        <label for="prefix">Announcement</label>
+        <input type="text" id="prefix" maxlength="40">
+        <p class="hint" id="prefixPreview"></p>
+      </div>
+      <div class="set">
+        <label class="toggle">Speak the announcement <input type="checkbox" id="voiceOn"></label>
+        <label class="toggle">Say it twice <input type="checkbox" id="repeatOn"></label>
+      </div>
+      <div class="set">
+        <span class="set-title">Voice type</span>
+        <div class="pills" id="genderPills"></div>
+      </div>
+      <div class="set">
+        <label for="rate" style="display:flex;justify-content:space-between;gap:8px"><span>Speaking speed</span><output id="rateVal" style="font-variant-numeric:tabular-nums;color:var(--muted)">1.00×</output></label>
+        <input type="range" id="rate" min="0.6" max="1.4" step="0.05">
+        <p class="hint">Each part is spoken separately with a short pause: “Sub time … Maya off … Leo off.”</p>
+      </div>
+      <div class="set">
+        <label for="voiceSel">Voice</label>
+        <div class="voice-row"><select id="voiceSel"></select><button id="hearVoice">Hear it</button></div>
+        <p class="banner" id="voiceStatus" hidden></p>
+        <button id="ttsSettings" class="ghost-btn native-only">Phone voice settings</button>
+        <p class="hint native-only">Automatic picks the clearest voice of the chosen type that is stored on this phone, so it works without internet. For more male voices: Phone voice settings → gear next to Speech Services by Google → Install voice data → English (United States).</p>
+        <p class="hint web-only">Automatic picks the clearest voice of the chosen type on this phone. On iPhone, download a better male voice in Settings → Accessibility → Spoken Content → Voices → English: "Evan (Enhanced)", "Nathan (Enhanced)" or "Daniel (Enhanced)" are good choices. Then reload this page.</p>
+      </div>
+      <div class="set">
+        <label for="vol">Beep volume</label>
+        <input type="range" id="vol" min="0.1" max="1" step="0.05">
+      </div>
+      <div class="set">
+        <span class="set-title">Positions in the rotation</span>
+        <div class="pills" id="incPills"></div>
+      </div>
+      <div class="set native-only">
+        <span class="set-title">Run with the screen locked</span>
+        <p class="hint" id="battHint"></p>
+        <button id="battBtn" class="ghost-btn">Allow background running</button>
+      </div>
+      <button id="test" class="test">Test the alert</button>
+      <p class="hint web-only">Over a Bluetooth speaker, start your music first, then press Start in here. Keep this screen open: phones pause web timers when the screen locks, so the page asks to stay awake while the match runs.</p>
+      <p class="hint native-only">Over a Bluetooth speaker, start your music first, then press Start in here. You can lock the phone or switch to your music app: the timer keeps going, the music dips for each announcement, and a notification shows the countdown.</p>
+    </section>
+  </main>
+</div>
+<div class="flash" id="flash"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* Inside the Android app, window.SubNative is the bridge to the native timer service, voice and music ducking */
+const NATIVE=window.SubNative||null;
+document.documentElement.classList.add(NATIVE?'is-native':'is-web');
+const POS=[{key:'DEF',name:'Defender',plural:'Defenders'},{key:'MID',name:'Midfielder',plural:'Midfielders'},{key:'ATT',name:'Attacker',plural:'Attackers'}];
+const KEY='soccer-sub-clock.v2';
+const PNAME={DEF:'Defender',MID:'Midfielder',ATT:'Attacker'};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=sec=>{sec=Math.max(0,Math.floor(sec));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0')};
+const fmtDown=sec=>fmt(Math.ceil(Math.max(0,sec)-1e-6));
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+function mkTeam(name,ex){return{name,roster:{DEF:{names:ex[0],onField:3},MID:{names:ex[1],onField:3},ATT:{names:ex[2],onField:2}},rot:null,posIdx:0}}
+function defaults(){
+  const s={
+    teams:[
+      mkTeam('Home',[['Maya','Liam','Ava','Noah','Zoe'],['Ethan','Chloe','Owen','Priya'],['Lucas','Sofia','Kai','Amara']]),
+      mkTeam('Away',[['Leo','Mia','Jack','Ella','Ryan'],['Nora','Ben','Isla','Sam'],['Ivy','Max','Ruby','Theo']])
+    ],
+    example:true,
+    settings:{v3:true,interval:240,warn:30,confirm:true,voice:true,repeat:false,prefix:'Sub time',voiceURI:'',volume:0.9,include:{DEF:true,MID:true,ATT:true}},
+    applied:'',log:[],undo:[],
+    match:{elapsed:0,startedAt:null},
+    timer:{remaining:240,dueAt:null,running:false,due:false,dueMatch:0,warned:false}
+  };
+  buildAll(s);return s;
+}
+function rosterSig(s){return JSON.stringify(s.teams.map(t=>t.roster))}
+function buildAll(s){
+  for(const t of s.teams){
+    t.rot={};t.posIdx=0;
+    for(const p of POS){
+      const names=t.roster[p.key].names.map(n=>n.trim()).filter(Boolean);
+      const n=Math.min(t.roster[p.key].onField,names.length);
+      t.rot[p.key]={field:names.slice(0,n),bench:names.slice(n)};
+    }
+  }
+  s.applied=rosterSig(s);
+}
+
+let state=null;
+const S0=s=>s.settings||{interval:240};
+try{
+  const raw=localStorage.getItem(KEY);
+  if(raw){
+    state=JSON.parse(raw);
+    /* a match still running from the last two hours resumes (the app was reopened mid-game); anything older is paused */
+    const t=state.timer,fresh=t.running&&t.dueAt&&Date.now()-t.dueAt<2*3600e3;
+    if(!fresh){if(t.running&&!t.due)t.remaining=S0(state).interval;t.running=false;t.dueAt=null;state.match.startedAt=null}
+  }
+  else{
+    const old=localStorage.getItem('soccer-sub-clock.v1');
+    if(old){
+      const o=JSON.parse(old);state=defaults();
+      if(o.roster&&!o.example){state.teams[0].roster=o.roster;state.example=false;buildAll(state)}
+      if(o.settings){const s=state.settings,os=o.settings;s.interval=os.interval||240;s.confirm=os.confirm!==false;s.voiceURI=os.voiceURI||'';s.volume=os.volume||0.9;if(os.include)s.include=os.include}
+      state.timer.remaining=state.settings.interval;
+    }
+  }
+}catch(e){state=null}
+if(!state||!state.teams)state=defaults();
+const S=()=>state.settings;
+if(!S().v3){S().v3=true;S().warn=30;S().voiceURI=''}
+if(!S().v4){S().v4=true;S().gender='male';S().voiceURI=''}
+if(!S().v5){S().v5=true;S().rate=0.95}
+
+function save(){
+  try{
+    const snap=clone(state);
+    snap.undo=snap.undo.slice(-20);
+    localStorage.setItem(KEY,JSON.stringify(snap));
+  }catch(e){}
+  syncNative();
+}
+
+/* ---------- rotation (each team cycles DEF → MID → ATT on its own) ---------- */
+function eligible(rot,key){return S().include[key]&&rot[key].bench.length>0&&rot[key].field.length>0}
+function nextIdx(rot,from){for(let i=0;i<3;i++){const j=(from+i)%3;if(eligible(rot,POS[j].key))return j}return -1}
+function pendingsOf(teams){
+  const out=[];
+  teams.forEach((t,i)=>{const j=nextIdx(t.rot,t.posIdx);if(j<0)return;const k=POS[j].key;out.push({team:i,idx:j,pos:k,off:t.rot[k].field[0],on:t.rot[k].bench[0]})});
+  return out;
+}
+function pendings(){return pendingsOf(state.teams)}
+function mutate(rot,p){const r=rot[p.pos];r.field.shift();r.bench.shift();r.field.push(p.on);r.bench.push(p.off)}
+function applySubs(at){
+  const ps=pendings();if(!ps.length)return null;
+  state.undo.push({teams:state.teams.map(t=>({rot:clone(t.rot),posIdx:t.posIdx})),log:clone(state.log)});
+  for(const p of ps){const t=state.teams[p.team];mutate(t.rot,p);t.posIdx=(p.idx+1)%3}
+  state.log.unshift({t:at==null?matchElapsed():Math.max(0,at),subs:ps.map(({team,pos,off,on})=>({team,pos,off,on}))});
+  return ps;
+}
+
+/* ---------- clocks ---------- */
+function matchElapsed(){const m=state.match;return m.elapsed+(m.startedAt?(Date.now()-m.startedAt)/1000:0)}
+function currentRemaining(){const t=state.timer;if(t.running&&!t.due&&t.dueAt)return(t.dueAt-Date.now())/1000;return t.remaining}
+/* fromDue keeps subs on a fixed grid (next = previous due time + interval), so the app and the Android service agree */
+function restartInterval(fromDue){
+  const t=state.timer;t.due=false;t.warned=false;t.remaining=S().interval;
+  if(t.running)t.dueAt=(fromDue&&t.dueAt?t.dueAt:Date.now())+t.remaining*1000;
+}
+function started(){return state.log.length>0||matchElapsed()>0.5}
+
+function start(){
+  primeAudio();keepAwake();
+  const t=state.timer;t.running=true;state.match.startedAt=Date.now();
+  if(!t.due)t.dueAt=Date.now()+t.remaining*1000;
+  render();save();
+}
+function pause(){
+  const t=state.timer;
+  state.match.elapsed=matchElapsed();state.match.startedAt=null;
+  if(!t.due)t.remaining=currentRemaining();
+  t.running=false;t.dueAt=null;releaseAwake();
+  render();save();
+}
+/* scheduled = the timer ran out (vs the Sub now button). In the Android app the service already
+   played the alert for scheduled subs, possibly while the screen was locked, so the page stays quiet. */
+function fireDue(scheduled){
+  const t=state.timer,ps=pendings();
+  const lateSec=scheduled&&t.running&&t.dueAt?Math.max(0,(Date.now()-t.dueAt)/1000):0;
+  if(!ps.length){if(!scheduled)toast('Nobody waiting to come on');restartInterval(scheduled);render();save();return}
+  announce(ps,!!(NATIVE&&scheduled),lateSec>5);
+  if(S().confirm){t.due=true;t.dueMatch=matchElapsed()-lateSec;t.remaining=0}
+  else{
+    applySubs(matchElapsed()-lateSec);restartInterval(scheduled);
+    /* catch up on any subs that came due while the app was asleep */
+    let n=0;
+    while(t.running&&t.dueAt<=Date.now()&&n++<50){const late=(Date.now()-t.dueAt)/1000;if(pendings().length)applySubs(matchElapsed()-late);restartInterval(true)}
+    toast(ps.map(p=>p.off+': Off').join(', '));
+  }
+  render();save();
+}
+function confirmSub(){const ps=applySubs();restartInterval(false);if(ps)toast('Logged: '+ps.map(p=>p.off+': Off').join(', '));render();save()}
+function skipTurn(){
+  let any=false;
+  for(const t of state.teams){const j=nextIdx(t.rot,t.posIdx);if(j>=0){t.posIdx=(j+1)%3;any=true}}
+  if(!any)return;
+  if(state.timer.due)restartInterval();
+  toast('Skipped this sub');render();save();
+}
+function undo(){
+  const u=state.undo.pop();if(!u)return;
+  u.teams.forEach((x,i)=>{state.teams[i].rot=x.rot;state.teams[i].posIdx=x.posIdx});
+  state.log=u.log;toast('Last sub undone');render();save();
+}
+function newMatch(){
+  releaseAwake();
+  state.match={elapsed:0,startedAt:null};
+  state.timer={remaining:S().interval,dueAt:null,running:false,due:false,dueMatch:0,warned:false};
+  state.log=[];state.undo=[];buildAll(state);
+  render();save();toast('New match ready');
+}
+
+/* ---------- sound + voice ---------- */
+let ctx=null,voices=[],primed=false;
+function primeAudio(){
+  try{if(navigator.audioSession)navigator.audioSession.type='transient'}catch(e){}
+  try{if(!ctx){const AC=window.AudioContext||window.webkitAudioContext;if(AC)ctx=new AC()}if(ctx&&ctx.state==='suspended')ctx.resume()}catch(e){}
+  if(!primed&&'speechSynthesis'in window){try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u);primed=true}catch(e){}}
+}
+/* one short high beep for the sub; a lower, quieter blip for the heads-up */
+function beep(freq,ms,level){
+  primeAudio();if(!ctx)return 0;
+  const t=ctx.currentTime+0.03,end=t+ms/1000,v=Math.max(0.05,S().volume)*0.5*level;
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type='square';o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(v,t+0.008);
+  g.gain.setValueAtTime(v,end-0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,end);
+  o.connect(g).connect(ctx.destination);o.start(t);o.stop(end+0.02);
+  return(end-ctx.currentTime)*1000;
+}
+/* rank voices so "Automatic" lands on the clearest one the device offers */
+function voiceScore(v){
+  const n=v.name.toLowerCase();let s=0;
+  if(/natural|neural/.test(n))s+=60;
+  if(/premium/.test(n))s+=55;
+  if(/enhanced/.test(n))s+=45;
+  if(/\bonline\b/.test(n))s+=30;
+  if(/google (us|uk) english/.test(n))s+=40;
+  const g=S().gender||'male';
+  if(g==='male'){if(isMale(v))s+=90;else if(isFemale(v))s-=40}
+  else if(g==='female'){if(isFemale(v))s+=90;else if(isMale(v))s-=40}
+  if(/en[-_]us/i.test(v.lang))s+=6;else if(/en[-_](gb|ca|au|ie)/i.test(v.lang))s+=4;
+  /* in the Android app, prefer voices stored on the phone: they work at a field with no signal */
+  if(v._native)s+=v.localService?15:-10;
+  if(/eddy|flo|reed|rocko|sandy|shelley|grandma|grandpa/.test(n))s-=30;
+  if(/compact|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|ralph|kathy|hysterical/.test(n))s-=100;
+  return s;
+}
+/* speech engines don't report gender, so match the well-known male and female voice names */
+function isMale(v){const n=(v.name+' '+v.voiceURI).toLowerCase();return/\bmale\b|\b(daniel|aaron|arthur|alex|evan|nathan|tom|gordon|oliver|rishi|lee|guy|andrew|brian|christopher|eric|roger|steffan|davis|david|mark|ryan|william|liam|connor|james|thomas|tony|jason|george|reed|eddy)\b|x-(iol|iom|tpd|rjs|gbd)/.test(n)}
+function isFemale(v){const n=(v.name+' '+v.voiceURI).toLowerCase();return/\bfemale\b|\b(aria|jenny|samantha|allison|susan|serena|karen|moira|tessa|ava|emma|zira|hazel|libby|sonia|natasha|joelle|nicky|victoria|kate|fiona|catherine|michelle|ana|jane|nancy|sara|flo|sandy|shelley)\b|x-(sfg|tpc|tpf|iog|gba)/.test(n)}
+function bestVoice(){return voices[0]||null}
+function pickedVoice(){return voices.find(x=>x.voiceURI===S().voiceURI)||bestVoice()}
+function voiceStatus(msg){const el=$('#voiceStatus');el.hidden=!msg;el.textContent=msg||''}
+/* Android voice names look like "en-us-x-iom-local"; turn them into something readable */
+function voiceLabel(v){
+  if(!v._native)return `${v.name} (${v.lang})`;
+  const m=v.name.match(/x-([a-z]+)/i),code=m?m[1].toUpperCase():v.name;
+  const kind=isMale(v)?'male':isFemale(v)?'female':'';
+  return `${v.lang} · ${code}${kind?' · '+kind:''}${v.localService?'':' · needs internet'}`;
+}
+function loadVoices(){
+  if(NATIVE){
+    let st='ready',list=[];
+    try{st=NATIVE.ttsState()}catch(e){}
+    try{list=JSON.parse(NATIVE.voices()||'[]')}catch(e){}
+    voices=list.filter(v=>/^en/i.test(v.lang)&&v.installed!==false)
+      .map(v=>({name:v.name,voiceURI:v.name,lang:v.lang,localService:!!v.local,_native:true}))
+      .sort((a,b)=>voiceScore(b)-voiceScore(a));
+    voiceStatus(st==='failed'?'This phone has no text-to-speech engine, so only the beep will play. Install “Speech Services by Google” from the Play Store, then reopen Sub Clock.'
+      :st==='ready'&&!voices.length?'No English voice is installed on this phone yet, so only the beep will play. Tap “Phone voice settings” and install English voice data.':'');
+  }else{
+    if(!('speechSynthesis'in window)){voiceStatus('This browser can’t speak. The beep still works. Try Chrome on Android or Safari on iPhone.');return}
+    voices=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang)).sort((a,b)=>voiceScore(b)-voiceScore(a));
+    voiceStatus(voices.length?'':'No English voice found on this device, so only the beep will play. On Android: Settings → Accessibility (or System → Languages) → Text-to-speech output → install English voice data. On iPhone: Settings → Accessibility → Spoken Content → Voices.');
+  }
+  const sel=$('#voiceSel'),b=bestVoice();
+  sel.innerHTML=`<option value="">Automatic${b?' · '+esc(voiceLabel(b)):''}</option>`+voices.map(v=>`<option value="${esc(v.voiceURI)}">${esc(voiceLabel(v))}</option>`).join('');
+  sel.value=voices.some(v=>v.voiceURI===S().voiceURI)?S().voiceURI:'';
+}
+/* speak each part as its own sentence with a deliberate pause between them */
+let speakToken=0;
+function sayParts(parts,times,force){
+  if((!S().voice&&!force)||!('speechSynthesis'in window))return;
+  /* Chrome on Android can drop an utterance queued right after cancel(), so only cancel when busy and wait a beat */
+  let busy=false;
+  try{busy=speechSynthesis.speaking||speechSynthesis.pending;if(busy)speechSynthesis.cancel();speechSynthesis.resume()}catch(e){}
+  const token=++speakToken,v=pickedVoice(),rate=S().rate||0.95;
+  const gap=Math.round(280/rate);
+  const pitch=(S().gender==='male'&&!(v&&isMale(v)))?0.8:1;
+  const seq=[];for(let r=0;r<times;r++)seq.push(...parts);
+  let i=0;
+  const next=()=>{
+    if(token!==speakToken||i>=seq.length)return;
+    const text=seq[i++];let done=false,safety=null;
+    const fin=()=>{if(done)return;done=true;clearTimeout(safety);setTimeout(next,i%parts.length===0?gap*2:gap)};
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate=rate;u.pitch=pitch;u.volume=1;
+    if(v){u.voice=v;u.lang=v.lang}else u.lang='en-US';
+    u.onend=fin;u.onerror=fin;
+    safety=setTimeout(fin,1500+text.length*120/rate);
+    try{speechSynthesis.speak(u)}catch(e){fin()}
+  };
+  if(busy)setTimeout(next,150);else next();
+}
+function parts(ps){
+  const pre=(S().prefix||'Sub time').replace(/[.!?,\s]+$/,'');
+  return [pre+'.',...ps.map(p=>p.off+' off.')];
+}
+function phrase(ps){return parts(ps).map(s=>s.replace(/\.$/,'')).join(' … ')}
+function nativeCall(method,obj){try{NATIVE&&NATIVE[method](JSON.stringify(obj))}catch(e){}}
+/* the sound settings the Android service needs to speak exactly like the page does */
+function audioCfg(p,beepKind,times){
+  const v=pickedVoice(),rate=S().rate||0.95;
+  return{parts:p,times:times||1,beep:beepKind,rate,volume:S().volume,voice:v?v.voiceURI:'',gapMs:Math.round(280/rate),
+    pitch:(S().gender==='male'&&!(v&&isMale(v)))?0.8:1,speak:!!S().voice};
+}
+function flash(){
+  const f=$('#flash');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');
+  try{navigator.vibrate&&navigator.vibrate([250,100,250])}catch(e){}
+}
+/* silent: the Android service has already played it; stale: it happened a while ago, skip the screen flash */
+function announce(ps,silent,stale){
+  if(!stale)flash();
+  if(silent)return;
+  if(NATIVE){nativeCall('announceNow',audioCfg(parts(ps),'sub',S().repeat?2:1));return}
+  const ms=beep(1976,140,1);
+  setTimeout(()=>sayParts(parts(ps),S().repeat?2:1),ms+150);
+}
+function warn(silent){
+  if(silent)return;
+  if(NATIVE){nativeCall('announceNow',audioCfg(['Last play before sub.'],'warn',1));return}
+  const ms=beep(1319,80,0.6);
+  setTimeout(()=>sayParts(['Last play before sub.'],1),ms+120);
+}
+
+/* ---------- Android service schedule ---------- */
+/* The page works out the next rounds of subs ahead of time (who comes off, and when) and hands them to the
+   service, which plays them on time even with the screen locked. In "Wait for Sub done" mode only the next
+   round is known, because the following one starts when Sub done is tapped. */
+let lastSync='';
+function syncNative(){
+  if(!NATIVE)return;
+  const t=state.timer,events=[],iv=S().interval*1000,w=S().warn;
+  if(t.running&&!t.due&&t.dueAt){
+    const sim=state.teams.map(tm=>({rot:clone(tm.rot),posIdx:tm.posIdx}));
+    let at=t.dueAt;
+    for(let r=0,rounds=S().confirm?1:40;r<rounds;r++){
+      const ps=pendingsOf(sim);
+      if(ps.length){
+        if(w>0&&S().interval>w+5)events.push({at:at-w*1000,kind:'warn',parts:['Last play before sub.'],times:1});
+        events.push({at,kind:'sub',parts:parts(ps),times:S().repeat?2:1,names:ps.map(p=>p.off)});
+        ps.forEach(p=>{const tm=sim[p.team];mutate(tm.rot,p);tm.posIdx=(p.idx+1)%3});
+      }
+      at+=iv;
+    }
+  }
+  const audio=audioCfg([],'sub',1);delete audio.parts;delete audio.beep;delete audio.times;
+  const payload={running:!!t.running,due:!!t.due,events,audio};
+  const json=JSON.stringify(payload);
+  if(json===lastSync)return;
+  lastSync=json;
+  try{NATIVE.sync(json)}catch(e){}
+}
+
+/* ---------- wake lock ---------- */
+let wl=null;
+async function keepAwake(){try{if('wakeLock'in navigator&&!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null})}}catch(e){}}
+function releaseAwake(){try{wl&&wl.release()}catch(e){}wl=null}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(state.timer.running)keepAwake();tick()}});
+/* hooks the Android app calls */
+window.onNativeVoices=()=>loadVoices();
+window.onNativeResume=()=>{tick();render();if(!$('#view-settings').hidden)renderSettings()};
+
+/* ---------- tick ---------- */
+let lastSave=0;
+function tick(){
+  const t=state.timer;
+  if(t.running&&!t.due){
+    const rem=currentRemaining(),w=S().warn;
+    if(w>0&&!t.warned&&rem<=w&&rem>1&&S().interval>w+5){t.warned=true;if(pendings().length)warn(!!NATIVE)}
+    if(rem<=0){fireDue(true);return}
+  }
+  updateClock();
+  if(Date.now()-lastSave>5000){lastSave=Date.now();save()}
+}
+setInterval(tick,200);
+
+/* ---------- render ---------- */
+function updateClock(){
+  const t=state.timer,el=$('#clock');
+  $('#matchClock').textContent=fmt(matchElapsed());
+  el.classList.toggle('due',t.due);
+  el.classList.toggle('idle',!t.running&&!t.due);
+  if(t.due){
+    $('#clockLabel').textContent='Sub now · waiting '+fmt(matchElapsed()-t.dueMatch);
+    $('#digits').textContent='SUB NOW';
+    $('#barFill').style.width='100%';
+  }else{
+    const rem=currentRemaining();
+    $('#clockLabel').textContent=t.running?'Next sub in':(started()?'Paused · next sub in':'Next sub in');
+    $('#digits').textContent=fmtDown(rem);
+    $('#barFill').style.width=(100*(1-rem/S().interval)).toFixed(1)+'%';
+  }
+}
+function render(){
+  const t=state.timer,ps=pendings();
+  $('#staleBanner').hidden=state.applied===rosterSig(state);
+
+  $('#next').innerHTML=`<div class="next-head"><span>${t.due?'Coming off now':'Next off'}</span></div>
+    <div class="offlist">${ps.length?ps.map(p=>`<div class="offrow"><b class="offline"><i class="dot t${p.team}"></i>${esc(p.off)}</b></div>`).join('')
+      :'<p class="empty">No subs available. Add more names in Lineup.</p>'}</div>`;
+
+  $('#confirm').hidden=!t.due;
+  const pr=$('#primary');
+  pr.textContent=t.running?'Pause':(started()?'Resume':'Start match');
+  pr.classList.toggle('running',t.running);
+  $('#subNow').disabled=t.due||!ps.length;
+  $('#skip').disabled=!ps.length;
+  $('#undo').disabled=state.undo.length===0;
+
+  const rows=(i,order)=>{
+    const tm=state.teams[i],p=ps.find(x=>x.team===i);
+    return order.map(k=>`<div class="line">${tm.rot[k].field.map((n,j)=>`<span class="chip t${i}${j===0&&p&&p.pos===k?' flag':''}">${esc(n)}</span>`).join('')}</div>`).join('');
+  };
+  $('#pitch').innerHTML=`<span class="side top">${esc(state.teams[1].name)}</span>
+    <div class="half">${rows(1,['DEF','MID','ATT'])}</div>
+    <div class="halfway"></div>
+    <div class="half">${rows(0,['ATT','MID','DEF'])}</div>
+    <span class="side bottom">${esc(state.teams[0].name)}</span>`;
+
+  $('#log').innerHTML=state.log.length?state.log.map(e=>`<li><time>${fmt(e.t)}</time><div class="txt">${e.subs.map(s=>`<div><i class="dot t${s.team}"></i><strong>${esc(s.off)}</strong>: Off</div>`).join('')}</div></li>`).join('')
+    :'<li style="display:block"><p class="empty">Subs appear here with the match time.</p></li>';
+
+  updateClock();
+  syncNative();
+}
+
+/* ---------- lineup editor ---------- */
+let lt=0;
+function renderLineup(){
+  $('#teamPick').innerHTML=state.teams.map((tm,i)=>`<button data-i="${i}" aria-pressed="${i===lt}"><i class="dot t${i}"></i><span>${esc(tm.name)}</span></button>`).join('');
+  $('#teamName').value=state.teams[lt].name;
+  const R=state.teams[lt].roster;
+  $('#posCards').innerHTML=POS.map(({key,plural})=>`<section class="card pos-card" data-pos="${key}">
+      <header><span class="pos-tag">${key}</span><h3>${plural}</h3><span class="step-label">On field</span>
+        <span class="stepper"><button data-act="dn" aria-label="Fewer ${plural} on field">−</button><output>${R[key].onField}</output><button data-act="up" aria-label="More ${plural} on field">+</button></span></header>
+      <textarea id="names-${key}" aria-label="${plural}, one per line" placeholder="One name per line">${esc(R[key].names.join('\n'))}</textarea>
+      <div class="count" id="count-${key}"></div></section>`).join('');
+  POS.forEach(({key})=>updateCount(key));
+}
+function updateCount(key){
+  const r=state.teams[lt].roster[key];const n=r.names.map(s=>s.trim()).filter(Boolean).length;
+  const on=Math.min(r.onField,n),wait=Math.max(0,n-on);
+  $('#count-'+key).textContent=`${n} player${n===1?'':'s'} · ${on} on the field`+(wait?` · ${wait} rotating in`:' · no subs for this position')+(n<r.onField?` · short ${r.onField-n}`:'');
+}
+$('#teamPick').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;lt=+b.dataset.i;renderLineup()});
+$('#teamName').addEventListener('input',e=>{
+  state.teams[lt].name=e.target.value.trim()||(lt?'Away':'Home');
+  const b=$('#teamPick').querySelectorAll('button span')[lt];if(b)b.textContent=state.teams[lt].name;
+  render();save();
+});
+$('#posCards').addEventListener('input',e=>{
+  const card=e.target.closest('.pos-card');if(!card)return;const key=card.dataset.pos;
+  state.teams[lt].roster[key].names=e.target.value.split('\n');state.example=false;updateCount(key);syncApply();render();save();
+});
+$('#posCards').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act]');if(!b)return;
+  const key=b.closest('.pos-card').dataset.pos,r=state.teams[lt].roster[key];
+  r.onField=Math.max(0,Math.min(11,r.onField+(b.dataset.act==='up'?1:-1)));
+  b.parentElement.querySelector('output').textContent=r.onField;updateCount(key);syncApply();render();save();
+});
+let applyArm=0;
+function syncApply(){
+  const stale=state.applied!==rosterSig(state);
+  const b=$('#apply');b.classList.remove('arm');applyArm=0;
+  b.textContent=stale?'Apply lineup for both teams':'Lineup is in use';b.disabled=!stale;
+}
+$('#apply').addEventListener('click',()=>{
+  if(started()&&!applyArm){applyArm=1;const b=$('#apply');b.classList.add('arm');b.textContent='Tap again: this resets the match clock and log';setTimeout(()=>{if(applyArm)syncApply()},4000);return}
+  for(const t of state.teams)for(const{key}of POS)t.roster[key].names=t.roster[key].names.map(s=>s.trim()).filter(Boolean);
+  newMatch();syncApply();showTab('match');toast('Lineup applied');
+});
+
+/* ---------- settings ---------- */
+const SAMPLE=()=>pendings().length?pendings():[{off:'Maya'},{off:'Leo'}];
+function pills(el,opts,cur,onPick){
+  el.innerHTML=opts.map(([v,l])=>`<button data-v="${v}" aria-pressed="${String(v)===String(cur)}">${l}</button>`).join('');
+  el.onclick=e=>{const b=e.target.closest('button');if(!b)return;onPick(b.dataset.v);renderSettings();render();save()};
+}
+function setIntervalSec(sec){
+  const old=S().interval;S().interval=Math.max(30,Math.min(900,sec));
+  const t=state.timer;if(!t.running&&!t.due&&Math.abs(t.remaining-old)<0.5)t.remaining=S().interval;
+}
+function renderSettings(){
+  const s=S();
+  $('#intVal').textContent=fmt(s.interval);
+  pills($('#intPresets'),[[180,'3:00'],[210,'3:30'],[240,'4:00'],[270,'4:30'],[300,'5:00']],s.interval,v=>setIntervalSec(+v));
+  pills($('#warnPills'),[[0,'Off'],[15,'15 sec'],[30,'30 sec'],[60,'1 min']],s.warn,v=>s.warn=+v);
+  pills($('#genderPills'),[['male','Male'],['female','Female'],['any','Any']],s.gender||'male',v=>{s.gender=v;s.voiceURI='';loadVoices()});
+  $('#rate').value=s.rate||0.95;$('#rateVal').textContent=(+(s.rate||0.95)).toFixed(2)+'×';
+  pills($('#modePills'),[['wait','Wait for “Sub done”'],['auto','Rotate automatically']],s.confirm?'wait':'auto',v=>s.confirm=v==='wait');
+  $('#incPills').innerHTML=POS.map(({key,plural})=>`<button data-k="${key}" aria-pressed="${s.include[key]}">${plural}</button>`).join('');
+  $('#prefix').value=s.prefix;$('#voiceOn').checked=s.voice;$('#repeatOn').checked=s.repeat;$('#vol').value=s.volume;
+  $('#prefixPreview').textContent='It will say: “'+phrase(SAMPLE())+'”';
+  renderBattery();
+}
+$('#intDown').onclick=()=>{setIntervalSec(S().interval-15);renderSettings();render();save()};
+$('#intUp').onclick=()=>{setIntervalSec(S().interval+15);renderSettings();render();save()};
+$('#incPills').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;S().include[k]=!S().include[k];renderSettings();render();save()};
+$('#prefix').oninput=e=>{S().prefix=e.target.value;$('#prefixPreview').textContent='It will say: “'+phrase(SAMPLE())+'”';save()};
+$('#voiceOn').onchange=e=>{S().voice=e.target.checked;save()};
+$('#repeatOn').onchange=e=>{S().repeat=e.target.checked;save()};
+$('#vol').oninput=e=>{S().volume=+e.target.value;save()};
+$('#rate').oninput=e=>{S().rate=+e.target.value;$('#rateVal').textContent=S().rate.toFixed(2)+'×';save()};
+$('#voiceSel').onchange=e=>{S().voiceURI=e.target.value;save()};
+$('#hearVoice').onclick=()=>{
+  primeAudio();
+  if(NATIVE){const c=audioCfg(parts(SAMPLE()),'none',1);c.speak=true;nativeCall('announceNow',c)}
+  else sayParts(parts(SAMPLE()),1,true);
+};
+$('#test').onclick=()=>{primeAudio();announce(SAMPLE())};
+$('#ttsSettings').onclick=()=>{try{NATIVE&&NATIVE.openVoiceSettings()}catch(e){}};
+$('#battBtn').onclick=()=>{try{NATIVE&&NATIVE.requestBackgroundRun()}catch(e){}};
+function renderBattery(){
+  if(!NATIVE)return;
+  let ok=false;try{ok=!!NATIVE.canRunInBackground()}catch(e){}
+  $('#battHint').textContent=ok?'Allowed. Subs are announced on time with the screen locked or while you use your music app.'
+    :'Recommended. Without this, Android may delay the timer when the phone has been locked for a while.';
+  $('#battBtn').hidden=ok;
+}
+
+/* ---------- tabs + buttons ---------- */
+function showTab(name){
+  ['match','lineup','settings'].forEach(n=>{$('#view-'+n).hidden=n!==name;$('#tab-'+n).setAttribute('aria-pressed',String(n===name))});
+  if(name==='lineup'){renderLineup();syncApply()}
+  if(name==='settings')renderSettings();
+  try{localStorage.setItem(KEY+'.tab',name)}catch(e){}
+  window.scrollTo(0,0);
+}
+document.querySelector('.seg').onclick=e=>{const b=e.target.closest('button');if(b)showTab(b.dataset.tab)};
+$('#goLineup').onclick=()=>showTab('lineup');
+$('#primary').onclick=()=>state.timer.running?pause():start();
+$('#confirm').onclick=()=>{primeAudio();confirmSub()};
+$('#subNow').onclick=()=>{primeAudio();fireDue(false)};
+$('#skip').onclick=skipTurn;
+$('#undo').onclick=undo;
+let nmArm=0;
+$('#newMatch').onclick=e=>{
+  const b=e.currentTarget;
+  if(!nmArm){nmArm=1;b.classList.add('arm');b.textContent='Tap again';setTimeout(()=>{nmArm=0;b.classList.remove('arm');b.textContent='New match'},3000);return}
+  nmArm=0;b.classList.remove('arm');b.textContent='New match';newMatch();
+};
+let toastT;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2400)}
+
+if(NATIVE)loadVoices();
+else if('speechSynthesis'in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices}
+window.addEventListener('pagehide',save);
+render();
+try{const tab=localStorage.getItem(KEY+'.tab');if(tab&&tab!=='match')showTab(tab)}catch(e){}
+</script>
+
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
+</script>
+</html>

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Sub Clock</string>
+    <string name="channel_name">Match timer</string>
+    <string name="channel_desc">Shows the countdown to the next sub while a match is running.</string>
+</resources>

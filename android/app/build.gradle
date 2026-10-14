@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.subclock.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.subclock.app'
+        minSdk 26          // Android 8.0 and newer
+        targetSdk 35
+        // GitHub builds number themselves, so each new APK installs as an update
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger())
+        versionName '1.0.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    // One fixed key for every build (Android Studio or GitHub), so a new APK
+    // installs over the old one instead of failing with "App not installed".
+    signingConfigs {
+        sideload {
+            storeFile file('sideload.keystore')
+            storePassword 'subclock'
+            keyAlias 'subclock'
+            keyPassword 'subclock'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.sideload
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.webkit:webkit:1.12.1'
+}
