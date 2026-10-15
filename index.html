@@ -187,6 +187,22 @@ input[type=range]{width:100%;accent-color:var(--go)}
 .sheet-actions{display:grid;grid-template-columns:1fr 2fr;gap:8px}
 .sheet-actions .ghost-btn{align-self:stretch}
 .gk-card input{font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+button.chip{border:0;font:inherit;font-weight:600;font-size:.9rem;cursor:pointer}
+.why{display:grid;gap:6px}
+.why button{text-align:left;border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.why button b{font-size:.95rem}
+.why button span{font-size:.82rem;color:var(--muted)}
+.why button[aria-pressed="true"]{border:2px solid var(--ink);padding:9px 11px;background:var(--surface)}
+.pchip.none{border-style:dashed}
+.out-wrap{display:flex;flex-direction:column;gap:8px}
+.out-list{display:flex;flex-direction:column}
+.out-row{display:flex;align-items:center;gap:8px;padding-block:8px;border-top:1px solid var(--line);min-width:0}
+.out-row:first-child{border-top:0}
+.out-row .nm{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.out-tag{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:6px;padding:2px 6px;border:1px solid var(--line);color:var(--muted)}
+.out-tag.game{color:var(--stop);border-color:var(--stop)}
+.out-row .back-btn{margin-left:auto;padding:6px 12px}
 .ghost-btn{align-self:flex-start;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 14px;font-weight:600}
 .is-native .web-only,.is-web .native-only{display:none!important}
 .test{background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem}
@@ -230,13 +246,20 @@ input[type=range]{width:100%;accent-color:var(--go)}
         <button id="undo">Undo</button>
         <button id="newMatch">New match</button>
       </div>
-      <button id="gkBtn" class="btn-sec">Change goalie</button>
+      <div class="row2">
+        <button id="offBtn" class="btn-sec">Player off early</button>
+        <button id="gkBtn" class="btn-sec">Change goalie</button>
+      </div>
     </div>
 
     <section class="card">
       <h2>On the field</h2>
       <div class="pitch" id="pitch"></div>
-      <p class="legend">Dashed outline = coming off at the next sub.</p>
+      <p class="legend">Dashed outline = coming off at the next sub. Tap a player to take them off early.</p>
+      <div class="out-wrap" id="outWrap" hidden>
+        <h2>Sitting out</h2>
+        <div class="out-list" id="outList"></div>
+      </div>
     </section>
 
     <section class="card">
@@ -329,6 +352,29 @@ input[type=range]{width:100%;accent-color:var(--go)}
 </div>
 <div class="flash" id="flash"></div>
 <div class="toast" id="toast" hidden></div>
+<div class="sheet-bg" id="offSheet" hidden>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="offTitle">
+    <h3 id="offTitle">Player off early</h3>
+    <div class="team-pick" id="offTeam"></div>
+    <div class="gk-block">
+      <span class="set-title">Who’s coming off?</span>
+      <div id="offPlayers" class="gk-list"></div>
+    </div>
+    <div class="gk-block" id="offWhyWrap">
+      <span class="set-title">Why?</span>
+      <div class="why" id="offWhy"></div>
+    </div>
+    <div class="gk-block" id="offRepWrap">
+      <span class="set-title" id="offRepLabel">Who goes in?</span>
+      <div id="offReps" class="gk-players"></div>
+    </div>
+    <p class="gk-preview" id="offPreview"></p>
+    <div class="sheet-actions">
+      <button id="offCancel" class="ghost-btn">Cancel</button>
+      <button id="offConfirm" class="apply">Make the change</button>
+    </div>
+  </section>
+</div>
 <div class="sheet-bg" id="gkSheet" hidden>
   <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="gkTitle">
     <h3 id="gkTitle">Change goalie</h3>
@@ -381,7 +427,7 @@ function defaults(){
 function rosterSig(s){return JSON.stringify(s.teams.map(t=>t.roster))}
 function buildAll(s){
   for(const t of s.teams){
-    t.rot={};t.posIdx=0;t.gk=(t.roster.gk||'').trim();
+    t.rot={};t.posIdx=0;t.gk=(t.roster.gk||'').trim();t.out=[];
     for(const p of POS){
       const names=t.roster[p.key].names.map(n=>n.trim()).filter(Boolean);
       const n=Math.min(t.roster[p.key].onField,names.length);
@@ -418,7 +464,7 @@ if(!S().v4){S().v4=true;S().gender='male';S().voiceURI=''}
 if(!S().v5){S().v5=true;S().rate=0.95}
 /* lineups saved before goalkeepers existed: add an empty goalie without flagging the lineup as edited */
 {const was=state.applied===rosterSig(state);
- for(const t of state.teams){if(typeof t.roster.gk!=='string')t.roster.gk='';if(typeof t.gk!=='string')t.gk=t.roster.gk.trim()}
+ for(const t of state.teams){if(typeof t.roster.gk!=='string')t.roster.gk='';if(typeof t.gk!=='string')t.gk=t.roster.gk.trim();if(!Array.isArray(t.out))t.out=[]}
  if(was)state.applied=rosterSig(state)}
 
 function save(){
@@ -440,7 +486,60 @@ function pendingsOf(teams){
 }
 function pendings(){return pendingsOf(state.teams)}
 function mutate(rot,p){const r=rot[p.pos];r.field.shift();r.bench.shift();r.field.push(p.on);r.bench.push(p.off)}
-function snapshotUndo(){state.undo.push({teams:state.teams.map(t=>({rot:clone(t.rot),posIdx:t.posIdx,gk:t.gk||''})),log:clone(state.log)})}
+function snapshotUndo(){state.undo.push({teams:state.teams.map(t=>({rot:clone(t.rot),posIdx:t.posIdx,gk:t.gk||'',out:clone(t.out||[])})),log:clone(state.log)})}
+
+/* ---------- player off early (tired / injured) ----------
+   sel: {pos,i} for a field player or {pos:'GK'} for the goalie.
+   kind: 'tired' = back of their line, still rotating; 'rest' = sits out until Back in;
+         'game' = out for the rest of this match.
+   rep:  {pos,where,i} of the replacement, or null for nobody (team plays one short).
+   A replacement always plays the position of the player they replace, and goes to the
+   end of that field line so they're the last to come off. */
+function earlyOff(teamIdx,sel,kind,rep){
+  const tm=state.teams[teamIdx];
+  const take=r=>{const src=tm.rot[r.pos],list=r.where==='field'?src.field:src.bench;return list.splice(r.i,1)[0]};
+  let off,on='',filled='';
+  if(sel.pos==='GK'){
+    off=tm.gk;if(!off)return null;
+    snapshotUndo();
+    tm.gk='';
+    if(rep){
+      on=take(rep);tm.gk=on;
+      const src=tm.rot[rep.pos];
+      if(rep.where==='field'&&src.bench.length){filled=src.bench.shift();src.field.push(filled)}
+    }
+    tm.out.push({name:off,from:'GK',kind:kind==='tired'?'rest':kind});
+  }else{
+    const r=tm.rot[sel.pos];off=r.field[sel.i];if(off==null)return null;
+    snapshotUndo();
+    r.field.splice(sel.i,1);
+    if(rep){on=take(rep);r.field.push(on)}
+    if(kind==='tired')r.bench.push(off);
+    else tm.out.push({name:off,from:sel.pos,kind});
+  }
+  const entry={team:teamIdx,off,from:sel.pos,kind,on,filled};
+  state.log.unshift({t:matchElapsed(),early:entry});
+  return entry;
+}
+/* a resting player returns: straight onto the field if the team is playing short, otherwise to
+   the back of their line. A goalie goes back in goal if nobody is there, else joins the defenders. */
+function backIn(teamIdx,oi){
+  const tm=state.teams[teamIdx],o=(tm.out||[])[oi];if(!o)return null;
+  snapshotUndo();
+  tm.out.splice(oi,1);
+  let where;
+  if(o.from==='GK'&&!tm.gk){tm.gk=o.name;where='goal'}
+  else{
+    const group=o.from==='GK'?'DEF':o.from;
+    const onField=POS.reduce((n,{key})=>n+tm.rot[key].field.length,0);
+    const target=POS.reduce((n,{key})=>n+(tm.roster[key].onField||0),0);
+    if(onField<target){tm.rot[group].field.push(o.name);where='field'}
+    else{tm.rot[group].bench.push(o.name);where='line'}
+  }
+  const entry={team:teamIdx,name:o.name,where};
+  state.log.unshift({t:matchElapsed(),back:entry});
+  return entry;
+}
 
 /* ---------- goalkeeper swap ----------
    The goalie sits outside the DEF/MID/ATT rotation. Swapping puts a chosen player in goal
@@ -518,7 +617,7 @@ function skipTurn(){
 }
 function undo(){
   const u=state.undo.pop();if(!u)return;
-  u.teams.forEach((x,i)=>{state.teams[i].rot=x.rot;state.teams[i].posIdx=x.posIdx;if('gk' in x)state.teams[i].gk=x.gk});
+  u.teams.forEach((x,i)=>{state.teams[i].rot=x.rot;state.teams[i].posIdx=x.posIdx;if('gk' in x)state.teams[i].gk=x.gk;if('out' in x)state.teams[i].out=x.out});
   state.log=u.log;toast('Undone');render();save();
 }
 function newMatch(){
@@ -742,9 +841,9 @@ function render(){
 
   const rows=(i,order)=>{
     const tm=state.teams[i],p=ps.find(x=>x.team===i);
-    return order.map(k=>`<div class="line">${tm.rot[k].field.map((n,j)=>`<span class="chip t${i}${j===0&&p&&p.pos===k?' flag':''}">${esc(n)}</span>`).join('')}</div>`).join('');
+    return order.map(k=>`<div class="line">${tm.rot[k].field.map((n,j)=>`<button class="chip t${i}${j===0&&p&&p.pos===k?' flag':''}" data-t="${i}" data-pos="${k}" data-i="${j}" aria-label="Take ${esc(n)} off early">${esc(n)}</button>`).join('')}</div>`).join('');
   };
-  const gkRow=i=>{const g=state.teams[i].gk;return `<div class="line">${g?`<span class="chip gk t${i}">GK · ${esc(g)}</span>`:''}</div>`};
+  const gkRow=i=>{const g=state.teams[i].gk;return `<div class="line">${g?`<button class="chip gk t${i}" data-t="${i}" data-pos="GK" aria-label="Take goalie ${esc(g)} off early">GK · ${esc(g)}</button>`:''}</div>`};
   $('#pitch').innerHTML=`<span class="side top">${esc(state.teams[1].name)}</span>
     <div class="half">${gkRow(1)}${rows(1,['DEF','MID','ATT'])}</div>
     <div class="halfway"></div>
@@ -753,7 +852,15 @@ function render(){
 
   const PL={DEF:'Defenders',MID:'Midfielders',ATT:'Attackers'};
   const gkLine=g=>`<div><i class="dot t${g.team}"></i><strong>${esc(g.in)}</strong>: In goal${g.out?` <span class="in">· ${esc(g.out)} to ${PL[g.group]}</span>`:''}${g.filled?` <span class="in">· ${esc(g.filled)} on</span>`:''}</div>`;
-  $('#log').innerHTML=state.log.length?state.log.map(e=>`<li><time>${fmt(e.t)}</time><div class="txt">${e.gk?gkLine(e.gk):e.subs.map(s=>`<div><i class="dot t${s.team}"></i><strong>${esc(s.off)}</strong>: Off</div>`).join('')}</div></li>`).join('')
+  const KIND={tired:'Off early (tired)',rest:'Out for now',game:'Out for the game'};
+  const earlyLine=g=>`<div><i class="dot t${g.team}"></i><strong>${esc(g.off)}</strong>: ${KIND[g.kind]}${g.on?` <span class="in">· ${esc(g.on)} in${g.from==='GK'?' goal':''}</span>`:''}${g.filled?` <span class="in">· ${esc(g.filled)} on</span>`:''}</div>`;
+  const backLine=g=>`<div><i class="dot t${g.team}"></i><strong>${esc(g.name)}</strong>: Back ${g.where==='field'?'on the field':g.where==='goal'?'in goal':'in the line'}</div>`;
+
+  const outs=state.teams.flatMap((t,ti)=>(t.out||[]).map((o,oi)=>({...o,ti,oi})));
+  $('#outWrap').hidden=!outs.length;
+  $('#outList').innerHTML=outs.map(o=>`<div class="out-row"><i class="dot t${o.ti}"></i><span class="nm">${esc(o.name)}</span><span class="out-tag ${o.kind}">${o.kind==='rest'?'Resting':'Out for the game'}</span>${o.kind==='rest'?`<button class="ghost-btn back-btn" data-t="${o.ti}" data-o="${o.oi}">Back in</button>`:''}</div>`).join('');
+
+  $('#log').innerHTML=state.log.length?state.log.map(e=>`<li><time>${fmt(e.t)}</time><div class="txt">${e.early?earlyLine(e.early):e.back?backLine(e.back):e.gk?gkLine(e.gk):e.subs.map(s=>`<div><i class="dot t${s.team}"></i><strong>${esc(s.off)}</strong>: Off</div>`).join('')}</div></li>`).join('')
     :'<li style="display:block"><p class="empty">Subs appear here with the match time.</p></li>';
 
   updateClock();
@@ -879,6 +986,100 @@ $('#newMatch').onclick=e=>{
   if(!nmArm){nmArm=1;b.classList.add('arm');b.textContent='Tap again';setTimeout(()=>{nmArm=0;b.classList.remove('arm');b.textContent='New match'},3000);return}
   nmArm=0;b.classList.remove('arm');b.textContent='New match';newMatch();
 };
+/* ---------- Player off early sheet ---------- */
+const SING={DEF:'defender',MID:'midfielder',ATT:'attacker'};
+let off={team:0,sel:null,kind:'tired',rep:undefined,repTouched:false,lastFocus:null};
+function openOff(team,sel){
+  off={team:team!=null?team:(off.team||0),sel:sel||null,kind:'tired',rep:undefined,repTouched:false,lastFocus:document.activeElement};
+  $('#offSheet').hidden=false;renderOff();
+  setTimeout(()=>{const b=$('#offTeam button[aria-pressed="true"]');b&&b.focus()},0);
+}
+function closeOff(){$('#offSheet').hidden=true;try{off.lastFocus&&off.lastFocus.focus()}catch(e){}}
+const sameRef=(a,b)=>a&&b&&a.pos===b.pos&&a.where===b.where&&a.i===b.i;
+function nameAt(tm,r){if(!r)return'';const s=tm.rot[r.pos];return(r.where==='field'?s.field:s.bench)[r.i]}
+function renderOff(){
+  const tm=state.teams[off.team],isGK=off.sel&&off.sel.pos==='GK';
+  if(isGK&&off.kind==='tired')off.kind='rest';
+  $('#offTeam').innerHTML=state.teams.map((t,i)=>`<button data-i="${i}" aria-pressed="${i===off.team}"><i class="dot t${i}"></i><span>${esc(t.name)}</span></button>`).join('');
+
+  const fieldChips=POS.map(({key})=>tm.rot[key].field.map((n,i)=>{
+    const s=off.sel&&off.sel.pos===key&&off.sel.i===i;
+    return `<button class="pchip" data-pos="${key}" data-i="${i}" aria-pressed="${!!s}"><span class="pos-tag">${key}</span>${esc(n)}</button>`;
+  }).join('')).join('');
+  const gkChip=tm.gk?`<button class="pchip" data-pos="GK" aria-pressed="${!!isGK}"><span class="pos-tag gk">GK</span>${esc(tm.gk)}</button>`:'';
+  $('#offPlayers').innerHTML=(gkChip+fieldChips)||'<p class="empty">Nobody on the field for this team.</p>';
+
+  const why=[['tired','Tired','Comes off now, goes to the back of the line, stays in the rotation.'],
+    ['rest','Out for now','Sits out until you tap Back in. The timer skips them.'],
+    ['game','Out for the game','Done for this match. Back in the lineup next match.']].filter(w=>!(isGK&&w[0]==='tired'));
+  $('#offWhyWrap').hidden=!off.sel;
+  $('#offWhy').innerHTML=why.map(([k,t,d])=>`<button data-k="${k}" aria-pressed="${off.kind===k}"><b>${t}</b><span>${d}</span></button>`).join('');
+
+  /* replacement: next in line for the same position, else the first player waiting anywhere */
+  if(off.sel&&!off.repTouched&&!isGK){
+    const own=tm.rot[off.sel.pos].bench.length?{pos:off.sel.pos,where:'bench',i:0}:null;
+    const any=POS.map(({key})=>key).find(k=>tm.rot[k].bench.length);
+    off.rep=own||(any?{pos:any,where:'bench',i:0}:null);
+  }
+  $('#offRepWrap').hidden=!off.sel;
+  $('#offRepLabel').textContent=isGK?'Who goes in goal?':'Who goes in?';
+  const repChips=where=>POS.map(({key})=>tm.rot[key][where].map((n,i)=>{
+    if(where==='field'&&off.sel&&off.sel.pos===key&&off.sel.i===i)return'';
+    const r={pos:key,where,i};
+    return `<button class="pchip" data-pos="${key}" data-where="${where}" data-i="${i}" aria-pressed="${!!sameRef(off.rep,r)}"><span class="pos-tag">${key}</span>${esc(n)}</button>`;
+  }).join('')).join('');
+  const waiting=repChips('bench'),onField=isGK?repChips('field'):'';
+  const none=`<button class="pchip none" data-none="1" aria-pressed="${off.rep===null}">${isGK?'Nobody in goal':'Nobody · play one short'}</button>`;
+  $('#offReps').innerHTML=(waiting?`<span class="gk-sub">Waiting to come on</span><div class="gk-list">${waiting}</div>`:'')
+    +(onField?`<span class="gk-sub">On the field</span><div class="gk-list">${onField}</div>`:'')
+    +`<div class="gk-list">${none}</div>`;
+
+  let msg='Tap the player who’s coming off.',ok=false;
+  if(off.sel){
+    const who=isGK?tm.gk:tm.rot[off.sel.pos].field[off.sel.i];
+    const what={tired:`${who} comes off and goes to the back of the ${PLURAL[off.sel.pos]} line.`,
+      rest:`${who} sits out until you bring them back.`,game:`${who} is out for the rest of the game.`}[off.kind];
+    if(off.rep===undefined){msg=what+' Pick who goes in goal.'}
+    else if(off.rep===null){ok=true;msg=what+(isGK?' Nobody is in goal.':` Nobody goes in: the ${PLURAL[off.sel.pos]} play one short.`)}
+    else{
+      ok=true;const rn=nameAt(tm,off.rep);
+      if(isGK){
+        const fill=off.rep.where==='field'&&tm.rot[off.rep.pos].bench[0];
+        msg=`${what} ${rn} goes in goal`+(fill?`, and ${fill} comes on for them.`:'.');
+      }else msg=`${what} ${rn} goes in`+(off.rep.pos!==off.sel.pos?` and plays as a ${SING[off.sel.pos]}.`:'.');
+    }
+  }
+  $('#offPreview').textContent=msg;
+  $('#offConfirm').disabled=!ok;
+}
+$('#offBtn').onclick=()=>openOff();
+$('#pitch').addEventListener('click',e=>{
+  const b=e.target.closest('button.chip');if(!b)return;
+  openOff(+b.dataset.t,b.dataset.pos==='GK'?{pos:'GK'}:{pos:b.dataset.pos,i:+b.dataset.i});
+});
+$('#offCancel').onclick=closeOff;
+$('#offSheet').addEventListener('click',e=>{if(e.target.id==='offSheet')closeOff()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#offSheet').hidden)closeOff()});
+$('#offTeam').onclick=e=>{const b=e.target.closest('button');if(!b)return;off.team=+b.dataset.i;off.sel=null;off.rep=undefined;off.repTouched=false;renderOff()};
+$('#offPlayers').onclick=e=>{const b=e.target.closest('.pchip');if(!b)return;
+  off.sel=b.dataset.pos==='GK'?{pos:'GK'}:{pos:b.dataset.pos,i:+b.dataset.i};off.rep=undefined;off.repTouched=false;renderOff()};
+$('#offWhy').onclick=e=>{const b=e.target.closest('button');if(!b)return;off.kind=b.dataset.k;renderOff()};
+$('#offReps').onclick=e=>{const b=e.target.closest('.pchip');if(!b)return;off.repTouched=true;
+  off.rep=b.dataset.none?null:{pos:b.dataset.pos,where:b.dataset.where,i:+b.dataset.i};renderOff()};
+$('#offConfirm').onclick=()=>{
+  if(!off.sel||off.rep===undefined)return;
+  const r=earlyOff(off.team,off.sel,off.kind,off.rep);
+  closeOff();
+  if(r)toast(`${r.off} off`+(r.on?` · ${r.on} in`:''));
+  render();save();
+};
+$('#outList').addEventListener('click',e=>{
+  const b=e.target.closest('.back-btn');if(!b)return;
+  const r=backIn(+b.dataset.t,+b.dataset.o);
+  if(r)toast(`${r.name} back ${r.where==='field'?'on the field':r.where==='goal'?'in goal':'in the line'}`);
+  render();save();
+});
+
 /* ---------- Change goalie sheet ---------- */
 const PLURAL={DEF:'Defenders',MID:'Midfielders',ATT:'Attackers'};
 let gk={team:0,pick:null,group:null,groupTouched:false,lastFocus:null};
